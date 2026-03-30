@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  password     String?  // 修改为可选，因为飞书登录不需要密码
+  feishuOpenId String?  @unique // 新增飞书 OpenID
+  name         String
+  role         String   @default("employee") // admin, employee
+  jobRole      String?  // 新增：岗位（商务-个贷/商务-知产/法务-诉讼/法务-知产/运营行政/技术）
+  currentStage Int      @default(1) // 新增：当前所处阶段（1:入职适应期, 2:业务认知期, 3:实操落地期）
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  courseProgresses CourseProgress[]
+  examResults      ExamResult[]
+  studyRecords     StudyRecord[] // 新增：每日学习记录
+  wrongQuestions   WrongQuestion[] // 新增：错题本
+}
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  category    String   @default("必修基础") // 新增：必修基础/个贷不良/知产维权/AI工具
+  isRequired  Boolean  @default(true) // 新增：是否必修
+  duration    Int      @default(0) // 新增：预计学习时长（分钟）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  materials   Material[]
+  progresses  CourseProgress[]
+}
+
+model Material {
+  id        Int      @id @default(autoincrement())
+  title     String
+  type      String   // video, document
+  url       String
+  courseId  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course    Course   @relation(fields: [courseId], references: [id])
+}
+
+model CourseProgress {
+  id               Int      @id @default(autoincrement())
+  userId           Int
+  courseId         Int
+  completed        Boolean  @default(false)
+  progress         Float    @default(0) // 0-100
+  completedMaterials String @default("[]") // JSON array of material IDs
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user             User     @relation(fields: [userId], references: [id])
+  course           Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+}
+
+model Exam {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  examType    String   @default("综合考") // 新增：随堂测/阶段考/综合考
+  relatedId   Int?     // 新增：关联ID（如果是随堂测，关联课程ID；如果是阶段考，关联阶段数值）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  questions   Question[]
+  results     ExamResult[]
+}
+
+model Question {
+  id          Int      @id @default(autoincrement())
+  examId      Int
+  content     String
+  type        String   // single_choice, multiple_choice, boolean
+  options     String   // JSON string of options
+  answer      String   // JSON string of correct answers or single string
+  explanation String?  // 新增：题目解析
+  score       Int      @default(10)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  exam        Exam     @relation(fields: [examId], references: [id])
+  wrongRecords WrongQuestion[] // 新增：错题关联
+}
+
+// 新增：每日学习时长记录
+model StudyRecord {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  date        DateTime @db.Date // 记录日期
+  duration    Int      @default(0) // 当日学习时长（分钟）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+}
+
+// 新增：错题本
+model WrongQuestion {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  questionId  Int
+  wrongAnswer String?  // 用户当时选错的答案
+  isMastered  Boolean  @default(false) // 是否已掌握/复习过
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+  question    Question @relation(fields: [questionId], references: [id])
+
+  @@unique([userId, questionId])
+}
+
+model ExamResult {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  examId      Int
+  score       Int
+  passed      Boolean
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  exam        Exam     @relation(fields: [examId], references: [id])
+}
